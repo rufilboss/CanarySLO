@@ -7,6 +7,7 @@ A cloud-native Kubernetes Operator written in Python using `kopf` and `httpx` th
 ## 1. Project Overview & Architecture
 
 ### The Problem
+
 Traditional deployment strategies (e.g., rolling updates) swap replicas blindly without verifying service-level health. When an unhandled edge case or performance regression hits production, bad code reaches 100% of users before engineers notice alerts.
 
 ### The Solution
@@ -34,3 +35,20 @@ The **SLO-Driven Canary Operator** acts as an autonomous reliability gatekeeper:
 +-------------+     |   +----------------------------+   |     +----------------+
 +------------------------------------+
 
+Step 1: Start a Local Cluster & Install Prometheus
+
+If using Minikube:
+
+```bash
+minikube start --driver=docker
+Install Prometheus using Helm:
+```
+
+```bash
+helm repo add prometheus-community [https://prometheus-community.github.io/helm-charts](https://prometheus-community.github.io/helm-charts)
+helm repo update
+helm install prometheus prometheus-community/prometheus \
+  --namespace monitoring \
+  --create-namespace \
+  --set server.service.type=ClusterIP
+```
