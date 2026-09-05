@@ -1,0 +1,13 @@
+apiVersion: devsecops.io/v1alpha1
+kind: CanaryDeployment
+metadata:
+  name: auth-service-canary
+  namespace: default
+spec:
+  targetDeployment: auth-service
+  prometheusUrl: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
+  stepWeight: 25
+  intervalSeconds: 30
+  thresholds:
+    maxErrorRatePercent: 0.5
+    maxP99LatencySeconds: 0.250
