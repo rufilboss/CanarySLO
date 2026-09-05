@@ -65,3 +65,53 @@ helm install prometheus prometheus-community/prometheus \
   --set server.service.type=ClusterIP
 ```
 
+Step 2: Apply the Custom Resource Definition (CRD) & RBAC
+
+Apply the CRD schema:
+
+```bash
+kubectl apply -f crds/canary-crd.yaml
+```
+
+Set up RBAC permissions (`k8s/rbac.yaml`):
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: canary-operator-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: canary-operator-role
+rules:
+  - apiGroups: ["devsecops.io"]
+    resources: ["canarydeployments", "canarydeployments/status"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: canary-operator-binding
+subjects:
+  - kind: ServiceAccount
+    name: canary-operator-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: canary-operator-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+```bash
+kubectl apply -f k8s/rbac.yaml
+```
+
