@@ -1,0 +1,48 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: canarydeployments.devsecops.io
+spec:
+  group: devsecops.io
+  names:
+    kind: CanaryDeployment
+    listKind: CanaryDeploymentList
+    plural: canarydeployments
+    singular: canarydeployment
+    shortNames:
+      - cd
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [targetDeployment, prometheusUrl, thresholds]
+              properties:
+                targetDeployment:
+                  type: string
+                prometheusUrl:
+                  type: string
+                stepWeight:
+                  type: integer
+                  default: 20
+                intervalSeconds:
+                  type: integer
+                  default: 30
+                thresholds:
+                  type: object
+                  properties:
+                    maxErrorRatePercent:
+                      type: number
+                    maxP99LatencySeconds:
+                      type: number
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+      subresources:
+        status: {}
