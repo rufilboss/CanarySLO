@@ -115,3 +115,62 @@ roleRef:
 kubectl apply -f k8s/rbac.yaml
 ```
 
+Step 3: Run the Operator
+
+Option A: Running locally against the cluster (Fastest for Development)
+Ensure your ~/.kube/config points to your active cluster:
+
+```bash
+# Set up a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install requirements
+pip install -r requirements.txt
+
+# Run operator via Kopf (uses local kubeconfig automatically)
+kopf run --standalone -A operator.py
+```
+
+Option B: Running inside the cluster as a Deployment
+Build and load the Docker image:
+
+```bash
+docker build -t canary-operator:latest .
+
+# If using Kind:
+# kind load docker-image canary-operator:latest
+
+# If using Minikube:
+# minikube image load canary-operator:latest
+```
+
+Deploy the operator:
+
+```bash
+kubectl create deployment canary-operator --image=canary-operator:latest
+kubectl set serviceaccount deployment/canary-operator canary-operator-sa
+```
+
+Step 4: Test Canary Progression and Rollback
+Deploy a Sample Service:
+
+```bash
+kubectl create deployment auth-service --image=nginx:alpine --replicas=2
+```
+
+Trigger Canary Analysis:
+
+```bash
+kubectl apply -f examples/sample-canary.yaml
+```
+
+Observe Operator Decisions & CRD Status:
+
+```bash
+# Stream operator logs
+kopf run -A operator.py --verbose
+
+# Inspect Custom Resource status
+kubectl get canarydeployment auth-service-canary -o yaml
+```
