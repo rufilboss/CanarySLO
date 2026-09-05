@@ -35,14 +35,26 @@ The **SLO-Driven Canary Operator** acts as an autonomous reliability gatekeeper:
 +-------------+     |   +----------------------------+   |     +----------------+
 +------------------------------------+
 
+## 2. Step-by-Step Local Run Guide
+
+You can run and test this operator locally on Minikube or Kind (Kubernetes in Docker).
+
+Prerequisites:
+
+- docker
+- kubectl
+- minikube or kind
+- python 3.10+
+
 Step 1: Start a Local Cluster & Install Prometheus
 
 If using Minikube:
 
 ```bash
 minikube start --driver=docker
-Install Prometheus using Helm:
 ```
+
+Install Prometheus using Helm:
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -52,3 +64,4 @@ helm install prometheus prometheus-community/prometheus \
   --create-namespace \
   --set server.service.type=ClusterIP
 ```
+
