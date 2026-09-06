@@ -174,3 +174,16 @@ kopf run -A operator.py --verbose
 # Inspect Custom Resource status
 kubectl get canarydeployment auth-service-canary -o yaml
 ```
+
+The operator transitions through lifecycle states:
+
+Initializing -> Progressing (Traffic Weight: 25%, 50%, 75%) -> Promoted (Traffic Weight: 100%)
+
+Or Failed (Traffic Weight: 0%) if an error budget or latency threshold is breached.
+
+4. Engineering Trade-offs & Production Considerations
+PromQL Evaluation Window: Uses an instant query over a 1m rate window. In high-throughput clusters, a 3m to 5m exponential smoothing window prevents transient anomalies from triggering false-positive rollbacks.
+
+Controller Concurrency: kopf.timer executes asynchronously using httpx, preventing thread starvation while polling external metrics endpoints.
+
+Idempotency & State Recovery: State is stored in the Kubernetes Custom Resource status subresource, ensuring the controller recovers state across restarts without split-brain conflicts.
