@@ -5,6 +5,7 @@ metadata:
   namespace: default
 spec:
   targetDeployment: auth-service
+  canaryImage: nginx:1.27-alpine
   prometheusUrl: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
   stepWeight: 25
   intervalSeconds: 30
