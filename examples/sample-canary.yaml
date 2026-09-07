@@ -6,8 +6,9 @@ metadata:
 spec:
   targetDeployment: auth-service
   canaryImage: nginx:1.27-alpine
+  canaryReplicas: 1
   prometheusUrl: "http://prometheus-k8s.monitoring.svc.cluster.local:9090"
-  stepWeight: 25
+  rolloutSteps: [5, 10, 25, 50, 100]
   intervalSeconds: 30
   thresholds:
     maxErrorRatePercent: 0.5
