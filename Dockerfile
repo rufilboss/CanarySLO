@@ -5,6 +5,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY operator.py .
+COPY canary_operator.py .
 
-ENTRYPOINT ["kopf", "run", "--all-namespaces", "operator.py"]
+ENTRYPOINT ["kopf", "run", "--all-namespaces", "canary_operator.py"]

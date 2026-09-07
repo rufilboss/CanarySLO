@@ -129,7 +129,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run operator via Kopf (uses local kubeconfig automatically)
-kopf run --standalone -A operator.py
+kopf run --standalone -A canary_operator.py
 ```
 
 Option B: Running inside the cluster as a Deployment
@@ -169,7 +169,7 @@ Observe Operator Decisions & CRD Status:
 
 ```bash
 # Stream operator logs
-kopf run -A operator.py --verbose
+kopf run -A canary_operator.py --verbose
 
 # Inspect Custom Resource status
 kubectl get canarydeployment auth-service-canary -o yaml
