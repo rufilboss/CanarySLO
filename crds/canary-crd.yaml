@@ -26,6 +26,10 @@ spec:
               properties:
                 targetDeployment:
                   type: string
+                  description: Name of the stable Deployment to canary.
+                serviceName:
+                  type: string
+                  description: Name of the Kubernetes Service to route traffic through. Defaults to targetDeployment.
                 canaryImage:
                   type: string
                   minLength: 1
