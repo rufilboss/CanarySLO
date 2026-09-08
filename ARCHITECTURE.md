@@ -43,16 +43,19 @@ selector:
 The operator implements traffic shifting via **dual Services + NGINX Ingress canary annotations**, following the pattern used by Argo Rollouts:
 
 #### Stable Service
+
 - **Name**: `<serviceName>` (e.g., `auth-service`)
 - **Selector**: Points to stable Deployment pods only
 - **Port**: 80 (configurable)
 
 #### Canary Service
+
 - **Name**: `<serviceName>-canary` (e.g., `auth-service-canary`)
 - **Selector**: Points to canary Deployment pods only
 - **Port**: 80 (same as stable)
 
 #### Canary Ingress
+
 - **Name**: `<serviceName>-canary-routing`
 - **Backend**: Routes to `canary-service`
 - **Canary Annotations** (NGINX controller):
@@ -70,6 +73,7 @@ traffic_weight = 10%
 ```
 
 **Why this approach?**
+
 - Industry-standard (Argo Rollouts uses identical pattern)
 - No custom proxying logic needed
 - Works with any NGINX-compatible controller
