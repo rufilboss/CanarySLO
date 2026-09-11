@@ -68,6 +68,46 @@ spec:
                       minimum: 0
             status:
               type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Initializing, Progressing, Promoted, Failed, Blocked]
+                  description: Current rollout phase.
+                trafficWeight:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  description: Current traffic percentage sent to canary.
+                currentStepIndex:
+                  type: integer
+                  minimum: -1
+                  description: Index in rolloutSteps; -1 means not yet started.
+                lastTransitionTime:
+                  type: string
+                  format: date-time
+                  description: When the last step transition occurred (ISO 8601).
+                lastAnalysisTime:
+                  type: string
+                  format: date-time
+                  description: When the last Prometheus analysis ran (ISO 8601).
+                reason:
+                  type: string
+                  description: Human-readable reason for current phase.
+                canaryDeployment:
+                  type: string
+                  description: Name of the canary Deployment.
+                stableService:
+                  type: string
+                  description: Name of the stable Service.
+                canaryService:
+                  type: string
+                  description: Name of the canary Service.
+                observedStableDeployment:
+                  type: string
+                  description: Name of the observed stable Deployment.
+                observedCanaryImage:
+                  type: string
+                  description: Image used for the canary Deployment.
               x-kubernetes-preserve-unknown-fields: true
       subresources:
         status: {}

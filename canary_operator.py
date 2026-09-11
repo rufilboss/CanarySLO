@@ -260,20 +260,43 @@ def reconcile_ingress_routing(
         )
 
 
-def get_next_rollout_weight(current_weight: int, spec: dict) -> int:
-    """Return the next configured weight, or use stepWeight for compatibility."""
+def get_rollout_steps(spec: dict) -> list:
+    """Extract and validate rollout steps from spec."""
     rollout_steps = spec.get("rolloutSteps")
     if rollout_steps:
         steps = [int(step) for step in rollout_steps]
         if steps != sorted(set(steps)) or steps[-1] != 100:
             raise ValueError("rolloutSteps must be strictly increasing and end at 100")
-        for step in steps:
-            if step > current_weight:
-                return step
-        return 100
+        return steps
 
     step_weight = int(spec.get("stepWeight", 20))
-    return min(current_weight + step_weight, 100)
+    steps = []
+    weight = step_weight
+    while weight < 100:
+        steps.append(weight)
+        weight += step_weight
+    steps.append(100)
+    return steps
+
+
+def get_step_index_for_weight(target_weight: int, steps: list) -> int:
+    """Return the index in steps list where the weight is, or -1 if not found."""
+    try:
+        return steps.index(target_weight)
+    except ValueError:
+        return -1
+
+
+def initialize_rollout_status(patch, logger):
+    """Initialize status fields for a new rollout."""
+    now = datetime.utcnow().isoformat()
+    patch.status["phase"] = "Initializing"
+    patch.status["trafficWeight"] = 0
+    patch.status["currentStepIndex"] = -1
+    patch.status["lastTransitionTime"] = now
+    patch.status["lastAnalysisTime"] = None
+    patch.status["reason"] = "Rollout initialized"
+    logger.info("Initialized rollout status at %s", now)
 
 
 async def query_prometheus(prometheus_url: str, query: str) -> float:
@@ -328,10 +351,36 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
     thresholds = spec.get("thresholds", {})
 
     current_weight = status.get("trafficWeight", 0)
+    current_step_index = status.get("currentStepIndex", -1)
     phase = status.get("phase", "Initializing")
+    last_transition_time = status.get("lastTransitionTime")
 
     if phase in ["Promoted", "Failed"]:
         return
+
+    try:
+        steps = get_rollout_steps(spec)
+    except ValueError as error:
+        patch.status["phase"] = "Blocked"
+        patch.status["reason"] = str(error)
+        logger.error("Invalid rollout contract: %s", error)
+        return
+
+    if phase == "Initializing":
+        if current_step_index == -1:
+            initialize_rollout_status(patch, logger)
+            current_step_index = -1
+            phase = "Initializing"
+        if current_weight == 0:
+            phase = "Initializing"
+        else:
+            current_step_index = get_step_index_for_weight(current_weight, steps)
+            if current_step_index == -1:
+                patch.status["phase"] = "Blocked"
+                patch.status["reason"] = f"Current weight {current_weight}% not in rolloutSteps"
+                logger.error("Weight %d not in rolloutSteps %s", current_weight, steps)
+                return
+            phase = "Progressing"
 
     try:
         canary_name = ensure_canary_deployment(
@@ -407,6 +456,9 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
     max_error = thresholds.get("maxErrorRatePercent", 1.0)
     max_latency = thresholds.get("maxP99LatencySeconds", 0.5)
 
+    now_iso = datetime.utcnow().isoformat()
+    patch.status["lastAnalysisTime"] = now_iso
+
     if error_rate > max_error or p99_latency > max_latency:
         logger.error(
             "SLO breach detected: error rate %.2f%% (max %.2f%%), p99 %.3fs (max %.3fs)",
@@ -418,23 +470,30 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
         rollback_deployment(namespace, target, logger)
         patch.status["phase"] = "Failed"
         patch.status["trafficWeight"] = 0
-        patch.status["reason"] = f"SLO breached at {datetime.utcnow().isoformat()}"
+        patch.status["currentStepIndex"] = -1
+        patch.status["lastTransitionTime"] = now_iso
+        patch.status["reason"] = f"SLO breached: error_rate {error_rate:.2f}% (max {max_error}%), p99 {p99_latency:.3f}s (max {max_latency}s)"
         return
 
-    try:
-        next_weight = get_next_rollout_weight(current_weight, spec)
-    except ValueError as error:
-        patch.status["phase"] = "Blocked"
-        patch.status["reason"] = str(error)
-        logger.error("Invalid rollout contract: %s", error)
-        return
+    next_step_index = current_step_index + 1
+    if next_step_index < len(steps):
+        next_weight = steps[next_step_index]
+    else:
+        next_weight = 100
+
+    now_iso = datetime.utcnow().isoformat()
     patch.status["trafficWeight"] = next_weight
+    patch.status["currentStepIndex"] = next_step_index if next_step_index < len(steps) else len(steps) - 1
+    patch.status["lastTransitionTime"] = now_iso
+    patch.status["lastAnalysisTime"] = now_iso
 
     if next_weight == 100:
         patch.status["phase"] = "Promoted"
+        patch.status["reason"] = f"Canary promoted to stable (100%% traffic, SLO healthy)"
         logger.info(
             "Canary %s successfully reached 100%% traffic and promoted.", target
         )
     else:
         patch.status["phase"] = "Progressing"
-        logger.info("Canary healthy. Increasing traffic weight to %s%%", next_weight)
+        patch.status["reason"] = f"Healthy; advancing from step {current_step_index + 1} to {next_step_index + 1} ({next_weight}%% traffic)"
+        logger.info("Canary healthy. Advancing from step %d to %d (%d%% traffic)", current_step_index + 1, next_step_index + 1, next_weight)
