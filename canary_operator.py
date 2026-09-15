@@ -6,6 +6,8 @@ import httpx
 import kopf
 import kubernetes  # type: ignore[import-untyped]
 
+controller_logger = logging.getLogger("canary-operator")
+
 
 def load_kubernetes_config():
     """Use service-account credentials in Kubernetes and kubeconfig locally."""
@@ -429,8 +431,15 @@ def rollback_deployment(namespace: str, deployment_name: str, logger):
     )
 
 
-@kopf.timer("devsecops.io", "v1alpha1", "canarydeployments", interval=30.0)
+@kopf.timer(
+    "devsecops.io",
+    "v1alpha1",
+    "canarydeployments",
+    interval=30.0,
+    initial_delay=30.0,
+)
 async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_):
+    logger = controller_logger
     target = spec.get("targetDeployment")
     service_name = spec.get("serviceName", target)
     canary_image = spec.get("canaryImage")
@@ -625,3 +634,17 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
         patch.status["phase"] = "Progressing"
         patch.status["reason"] = f"Healthy; advancing from step {current_step_index + 1} to {next_step_index + 1} ({next_weight}%% traffic)"
         logger.info("Canary healthy. Advancing from step %d to %d (%d%% traffic)", current_step_index + 1, next_step_index + 1, next_weight)
+
+
+@kopf.on.create("devsecops.io", "v1alpha1", "canarydeployments")
+async def reconcile_new_canary(spec, status, namespace, name, patch, logger, **kwargs):
+    """Start reconciliation immediately; the timer handles subsequent analysis."""
+    await evaluate_canary_slo(
+        spec=spec,
+        status=status or {},
+        namespace=namespace,
+        name=name,
+        patch=patch,
+        logger=logger,
+        **kwargs,
+    )
