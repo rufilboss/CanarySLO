@@ -12,7 +12,10 @@ def load_kubernetes_config():
     try:
         kubernetes.config.load_incluster_config()
     except kubernetes.config.ConfigException:
-        kubernetes.config.load_kube_config()
+        try:
+            kubernetes.config.load_kube_config()
+        except kubernetes.config.ConfigException:
+            logging.warning("No Kubernetes configuration found; API calls will fail until configured")
 
 
 load_kubernetes_config()

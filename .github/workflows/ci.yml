@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install development dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run unit tests
+        run: python -m pytest -q
+      - name: Run type checking
+        run: python -m mypy canary_operator.py
+      - name: Validate manifests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in [
+              Path("crds/canary-crd.yaml"),
+              Path("examples/sample-canary.yaml"),
+              Path("k8s/rbac.yaml"),
+          ]:
+              with path.open() as stream:
+                  list(yaml.safe_load_all(stream))
+              print(f"valid YAML: {path}")
+          PY
+      - name: Validate smoke script
+        run: bash -n scripts/smoke-test.sh
+      - name: Build container
+        run: docker build --tag canary-operator:test .
