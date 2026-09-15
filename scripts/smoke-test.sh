@@ -10,7 +10,7 @@ cleanup() {
         kill "$operator_pid" 2>/dev/null || true
         wait "$operator_pid" 2>/dev/null || true
     fi
-    kubectl delete namespace "$namespace" --ignore-not-found >/dev/null 2>&1 || true
+    kubectl delete namespace "$namespace" --ignore-not-found --wait=false >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -22,6 +22,7 @@ for command_name in kubectl kopf; do
 done
 
 kubectl apply -f crds/canary-crd.yaml
+kubectl delete namespace "$namespace" --ignore-not-found --wait=false >/dev/null 2>&1 || true
 kubectl create namespace "$namespace" 2>/dev/null || true
 kubectl -n "$namespace" create deployment payments \
     --image=nginx:1.25-alpine \
