@@ -190,13 +190,6 @@ def reconcile_ingress_routing(
     Reconcile Ingress with canary-weight annotations for traffic splitting.
     Uses NGINX ingress controller canary annotations.
     """
-    if traffic_weight == 0 or traffic_weight == 100:
-        logger.info(
-            "Traffic at %d%%; skipping ingress canary annotation (binary state)",
-            traffic_weight,
-        )
-        return
-
     canary_service_name = f"{service_name}-canary"
     canary_weight_percent = traffic_weight
 
@@ -258,6 +251,98 @@ def reconcile_ingress_routing(
         logger.info(
             "Created Ingress %s with canary weight %d%%", ingress_name, canary_weight_percent
         )
+
+
+def scale_canary_deployment(namespace: str, canary_name: str, replicas: int, logger):
+    """Scale the canary to a known replica count during rollback or cleanup."""
+    try:
+        apps_v1.patch_namespaced_deployment_scale(
+            name=canary_name,
+            namespace=namespace,
+            body={"spec": {"replicas": replicas}},
+        )
+        logger.info("Scaled canary Deployment %s to %d replicas", canary_name, replicas)
+    except kubernetes.client.exceptions.ApiException as error:
+        if error.status != 404:
+            raise
+        logger.info("Canary Deployment %s is already absent", canary_name)
+
+
+def rollback_canary(
+    namespace: str,
+    service_name: str,
+    canary_name: str,
+    resource_name: str,
+    logger,
+):
+    """Return all traffic to stable and stop the unhealthy canary."""
+    reconcile_ingress_routing(
+        namespace=namespace,
+        service_name=service_name,
+        traffic_weight=0,
+        resource_name=resource_name,
+        logger=logger,
+    )
+    scale_canary_deployment(namespace, canary_name, 0, logger)
+    logger.warning("Canary %s rolled back; stable traffic restored", canary_name)
+
+
+def promote_canary(
+    namespace: str,
+    target_name: str,
+    canary_name: str,
+    service_name: str,
+    logger,
+):
+    """Copy the canary image to stable, then remove temporary canary resources."""
+    canary = apps_v1.read_namespaced_deployment(name=canary_name, namespace=namespace)
+    if not canary.spec or not canary.spec.template.spec:
+        raise ValueError(f"Canary Deployment {canary_name!r} has no usable pod template")
+
+    stable = apps_v1.read_namespaced_deployment(name=target_name, namespace=namespace)
+    if not stable.spec or not stable.spec.template.spec:
+        raise ValueError(f"Stable Deployment {target_name!r} has no usable pod template")
+
+    canary_images = {
+        container.name: container.image
+        for container in canary.spec.template.spec.containers
+    }
+    stable_containers = [
+        {"name": container.name, "image": canary_images.get(container.name, container.image)}
+        for container in stable.spec.template.spec.containers
+    ]
+    apps_v1.patch_namespaced_deployment(
+        name=target_name,
+        namespace=namespace,
+        body={
+            "spec": {
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "devsecops.io/promoted-from": canary_name,
+                            "devsecops.io/promoted-at": datetime.utcnow().isoformat(),
+                        }
+                    },
+                    "spec": {"containers": stable_containers},
+                }
+            }
+        },
+    )
+
+    scale_canary_deployment(namespace, canary_name, 0, logger)
+    canary_service_name = f"{service_name}-canary"
+    for delete_call, resource in [
+        (core_v1.delete_namespaced_service, canary_service_name),
+        (networking_v1.delete_namespaced_ingress, f"{service_name}-canary-routing"),
+        (apps_v1.delete_namespaced_deployment, canary_name),
+    ]:
+        try:
+            delete_call(name=resource, namespace=namespace)
+        except kubernetes.client.exceptions.ApiException as error:
+            if error.status != 404:
+                raise
+
+    logger.info("Promoted canary %s to stable Deployment %s", canary_name, target_name)
 
 
 def get_rollout_steps(spec: dict) -> list:
@@ -467,11 +552,27 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
             p99_latency,
             max_latency,
         )
-        rollback_deployment(namespace, target, logger)
+        try:
+            rollback_canary(
+                namespace=namespace,
+                service_name=service_name,
+                canary_name=canary_name,
+                resource_name=name,
+                logger=logger,
+            )
+        except Exception as error:
+            patch.status["phase"] = "Blocked"
+            patch.status["reason"] = f"Rollback failed: {error}"
+            logger.exception("Could not complete canary rollback")
+            return
         patch.status["phase"] = "Failed"
         patch.status["trafficWeight"] = 0
         patch.status["currentStepIndex"] = -1
         patch.status["lastTransitionTime"] = now_iso
+        patch.status["observedMetrics"] = {
+            "errorRatePercent": error_rate,
+            "p99LatencySeconds": p99_latency,
+        }
         patch.status["reason"] = f"SLO breached: error_rate {error_rate:.2f}% (max {max_error}%), p99 {p99_latency:.3f}s (max {max_latency}s)"
         return
 
@@ -486,10 +587,34 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
     patch.status["currentStepIndex"] = next_step_index if next_step_index < len(steps) else len(steps) - 1
     patch.status["lastTransitionTime"] = now_iso
     patch.status["lastAnalysisTime"] = now_iso
+    patch.status["observedMetrics"] = {
+        "errorRatePercent": error_rate,
+        "p99LatencySeconds": p99_latency,
+    }
 
     if next_weight == 100:
+        try:
+            reconcile_ingress_routing(
+                namespace=namespace,
+                service_name=service_name,
+                traffic_weight=100,
+                resource_name=name,
+                logger=logger,
+            )
+            promote_canary(
+                namespace=namespace,
+                target_name=target,
+                canary_name=canary_name,
+                service_name=service_name,
+                logger=logger,
+            )
+        except Exception as error:
+            patch.status["phase"] = "Blocked"
+            patch.status["reason"] = f"Promotion failed: {error}"
+            logger.exception("Could not complete canary promotion")
+            return
         patch.status["phase"] = "Promoted"
-        patch.status["reason"] = f"Canary promoted to stable (100%% traffic, SLO healthy)"
+        patch.status["reason"] = "Canary promoted to stable (100% traffic, SLO healthy)"
         logger.info(
             "Canary %s successfully reached 100%% traffic and promoted.", target
         )

@@ -108,6 +108,13 @@ spec:
                 observedCanaryImage:
                   type: string
                   description: Image used for the canary Deployment.
+                observedMetrics:
+                  type: object
+                  properties:
+                    errorRatePercent:
+                      type: number
+                    p99LatencySeconds:
+                      type: number
               x-kubernetes-preserve-unknown-fields: true
       subresources:
         status: {}
