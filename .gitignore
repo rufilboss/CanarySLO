@@ -216,6 +216,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-./ARCHITECTURE.md
-ARCHITECTURE.md
 IMPLEMENTATION_PLAN.md
+ARCHITECTURE_PLAN.md
