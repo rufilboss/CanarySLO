@@ -34,7 +34,7 @@ kubectl -n "$namespace" expose deployment payments --port=80 --name=payments
 kopf run --standalone --all-namespaces canary_operator.py >"${TMPDIR:-/tmp}/canary-operator-smoke.log" 2>&1 &
 operator_pid=$!
 
-sed "s/namespace: default/namespace: ${namespace}/; s#prometheusUrl:.*#prometheusUrl: \"${prometheus_url}\"#" \
+sed "s/namespace: default/namespace: ${namespace}/; s/targetDeployment: auth-service/targetDeployment: payments/; s/serviceName: auth-service/serviceName: payments/; s#prometheusUrl:.*#prometheusUrl: \"${prometheus_url}\"#" \
     examples/sample-canary.yaml \
     | kubectl apply -f -
 
