@@ -2,7 +2,7 @@
 
 An SLO-driven Kubernetes operator written in Python with Kopf, the Kubernetes client, and HTTPX. It creates an isolated canary Deployment, evaluates Prometheus RED metrics, progressively changes traffic, and rolls back or promotes a release.
 
-This is a learning and portfolio project targeting Kubernetes, Prometheus, and the NGINX Ingress Controller.
+This is a learning project I decided to work on; targeting Kubernetes, Prometheus, and the NGINX Ingress Controller.
 
 ## Behavior
 
@@ -20,17 +20,6 @@ For a `CanaryDeployment`, the operator:
 State is persisted in the custom resource status for restart recovery.
 
 ## Architecture
-
-```text
-CanaryDeployment -> Python/Kopf operator
-											|              |
-											v              v
-								 Deployments     Prometheus
-								 Services        RED metrics
-								 Ingress         SLO decision
-											|
-			 stable Service + canary Service
-```
 
 Canary Pods use isolated labels:
 
