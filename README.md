@@ -69,7 +69,7 @@ bash -n scripts/smoke-test.sh
 git diff --check
 ```
 
-Validate manifests:
+<!-- Validate manifests:
 
 ```bash
 python - <<'PY'
@@ -81,7 +81,7 @@ for path in [Path("crds/canary-crd.yaml"), Path("examples/sample-canary.yaml"), 
 				list(yaml.safe_load_all(stream))
 		print(f"valid YAML: {path}")
 PY
-```
+``` -->
 
 Build the image:
 
