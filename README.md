@@ -329,4 +329,3 @@ Requires a live Prometheus/Ingress environment:
 - Weighted routing requires NGINX Ingress.
 - The smoke test verifies reconciliation, not traffic percentages.
 - Promotion updates container images but does not provide a release history.
-- `datetime.utcnow()` currently emits a Python 3.13 deprecation warning.
