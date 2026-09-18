@@ -1,6 +1,6 @@
 import logging
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 import kopf
@@ -325,7 +325,7 @@ def promote_canary(
                     "metadata": {
                         "annotations": {
                             "devsecops.io/promoted-from": canary_name,
-                            "devsecops.io/promoted-at": datetime.utcnow().isoformat(),
+                            "devsecops.io/promoted-at": datetime.now(timezone.utc).isoformat(),
                         }
                     },
                     "spec": {"containers": stable_containers},
@@ -379,7 +379,7 @@ def get_step_index_for_weight(target_weight: int, steps: list) -> int:
 
 def initialize_rollout_status(patch, logger):
     """Initialize status fields for a new rollout."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     patch.status["phase"] = "Initializing"
     patch.status["trafficWeight"] = 0
     patch.status["currentStepIndex"] = -1
@@ -418,7 +418,7 @@ def rollback_deployment(namespace: str, deployment_name: str, logger):
             "template": {
                 "metadata": {
                     "annotations": {
-                        "devsecops.io/rollback-timestamp": datetime.utcnow().isoformat()
+                        "devsecops.io/rollback-timestamp": datetime.now(timezone.utc).isoformat()
                     }
                 }
             }
@@ -553,7 +553,7 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
     max_error = thresholds.get("maxErrorRatePercent", 1.0)
     max_latency = thresholds.get("maxP99LatencySeconds", 0.5)
 
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     patch.status["lastAnalysisTime"] = now_iso
 
     if error_rate > max_error or p99_latency > max_latency:
@@ -594,7 +594,7 @@ async def evaluate_canary_slo(spec, status, namespace, name, patch, logger, **_)
     else:
         next_weight = 100
 
-    now_iso = datetime.utcnow().isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
     patch.status["trafficWeight"] = next_weight
     patch.status["currentStepIndex"] = next_step_index if next_step_index < len(steps) else len(steps) - 1
     patch.status["lastTransitionTime"] = now_iso
